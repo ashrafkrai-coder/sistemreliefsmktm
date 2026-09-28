@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "Sistem Pintar Penggantian Guru SMK Taman Medan",
+  "short_name": "Relief SMKTM",
+  "description": "Sistem pintar penggantian guru SMK Taman Medan untuk pengurusan ketidakhadiran dan relief harian.",
+  "lang": "ms-MY",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#123c35",
+  "background_color": "#f4f7f5",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

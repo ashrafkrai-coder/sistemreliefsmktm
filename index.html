@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ms">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#123c35">
+    <meta name="description" content="Sistem pintar penggantian guru SMK Taman Medan untuk pengurusan ketidakhadiran dan relief harian.">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icons/icon.svg">
+    <link rel="stylesheet" href="/styles.css">
+    <title>Sistem Pintar Penggantian Guru SMK Taman Medan</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Sistem Pintar Penggantian Guru SMK Taman Medan, halaman utama">
+        <span class="brand-mark" aria-hidden="true">SP</span>
+        <span>Sistem Pintar<span class="brand-subtitle">PENGGANTIAN GURU · SMK TAMAN MEDAN</span></span>
+      </a>
+      <div class="topbar-actions">
+        <button id="auth-open-button" class="button button-outline" type="button" hidden>Log masuk</button>
+        <div id="signed-in-panel" class="signed-in-panel" hidden>
+          <span id="signed-in-email" class="signed-in-email"></span>
+          <button id="sign-out-button" class="button button-outline" type="button">Log keluar</button>
+        </div>
+        <button id="install-button" class="button button-outline" type="button" hidden>Pasang aplikasi</button>
+      </div>
+    </header>
+
+    <main class="page">
+      <section class="welcome">
+        <div>
+          <p class="eyebrow">PAPAN PEMUKA</p>
+          <h1>Selamat datang</h1>
+          <p class="muted">Urus ketidakhadiran dan penggantian guru harian SMK Taman Medan.</p>
+        </div>
+        <div id="connection-status" class="status-pill" role="status">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span>Dalam talian</span>
+        </div>
+      </section>
+
+      <section class="summary-grid" aria-label="Ringkasan hari ini">
+        <article class="summary-card">
+          <span class="summary-label">Tarikh</span>
+          <strong id="today-label">—</strong>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">Guru tidak hadir</span>
+          <strong id="absence-count">0</strong>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">Rekod disimpan</span>
+          <strong id="saved-count">0</strong>
+        </article>
+      </section>
+
+      <div class="content-grid">
+        <section class="panel telegram-panel" aria-labelledby="telegram-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">IMPORT TELEGRAM</p>
+              <h2 id="telegram-heading">Tampal mesej harian</h2>
+            </div>
+          </div>
+          <p class="muted import-intro">Tampal mesej cuti guru di bawah. Semak pratonton sebelum rekod disimpan.</p>
+          <form id="telegram-form">
+            <label>
+              Mesej Telegram
+              <textarea id="telegram-text" rows="7" required placeholder="TARIKH : 28/09/2026&#10;HARI : ISNIN&#10;TUGASAN LUAR&#10;Jamal - Keluar pada pukul 10:30 pagi&#10;Roziana - PKL (10.20-1.20)"></textarea>
+            </label>
+            <div class="telegram-actions">
+              <button class="button button-outline" type="submit">Baca dan pratonton</button>
+              <button id="import-button" class="button button-primary" type="button" disabled>Simpan rekod dipilih</button>
+            </div>
+          </form>
+          <p id="telegram-message" class="privacy-note" role="status" aria-live="polite">Import memerlukan tarikh dan baris guru dalam format “Nama - catatan”.</p>
+          <div id="telegram-preview" class="telegram-preview" hidden>
+            <h3>Pratonton rekod</h3>
+            <div class="preview-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Pilih</th>
+                    <th scope="col">Guru</th>
+                    <th scope="col">Tarikh</th>
+                    <th scope="col">Kategori</th>
+                    <th scope="col">Catatan / waktu</th>
+                  </tr>
+                </thead>
+                <tbody id="telegram-preview-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+
+
+        <section class="panel" aria-labelledby="add-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">REKOD HARIAN</p>
+              <h2 id="add-heading">Tambah ketidakhadiran</h2>
+            </div>
+          </div>
+          <form id="absence-form">
+            <label>
+              Nama guru
+              <input name="teacher" autocomplete="name" required maxlength="120" placeholder="Contoh: Cikgu Jamal">
+            </label>
+            <div class="form-row">
+              <label>
+                Tarikh
+                <input name="date" type="date" required>
+              </label>
+              <label>
+                Kategori
+                <select name="category" required>
+                  <option value="TUGASAN LUAR">Tugasan luar</option>
+                  <option value="CUTI SAKIT (MC)">Cuti sakit (MC)</option>
+                  <option value="TEMUJANJI HOSPITAL">Temujanji hospital</option>
+                  <option value="LAIN-LAIN URUSAN">Lain-lain urusan</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              Catatan / had masa <span class="optional">Pilihan</span>
+              <input name="remark" maxlength="240" placeholder="Contoh: Keluar pada pukul 10:30 pagi">
+            </label>
+            <button class="button button-primary" type="submit">Simpan rekod</button>
+          </form>
+          <p class="privacy-note">Rekod disimpan setempat ketika luar talian; log masuk membolehkan penyegerakan dengan pangkalan data sekolah.</p>
+        </section>
+
+        <section id="relief-panel" class="panel relief-panel" aria-labelledby="relief-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">PENGAGIHAN ADIL</p>
+              <h2 id="relief-heading">Cadangan guru ganti</h2>
+            </div>
+            <button id="export-pdf-button" class="button button-outline" type="button" disabled>Eksport hasil ke PDF</button>
+          </div>
+          <form id="relief-form" class="relief-toolbar">
+            <label>
+              Tarikh relief
+              <input id="relief-date" name="date" type="date" required>
+            </label>
+            <button id="generate-relief-button" class="button button-primary" type="submit">Jana cadangan</button>
+            <button id="save-relief-button" class="button button-outline" type="button" disabled>Simpan tugasan dipilih</button>
+          </form>
+          <p class="privacy-note">
+            Calon yang mengajar, tidak hadir atau sudah menerima tugasan pada period sama dikecualikan. Skor mengutamakan beban relief rendah dan memberi bonus opsyen subjek.
+          </p>
+          <p id="relief-message" class="privacy-note" role="status" aria-live="polite">Log masuk untuk menjana cadangan menggunakan jadual dan rekod sekolah.</p>
+          <div id="relief-warnings" class="relief-warnings" hidden></div>
+          <div class="preview-scroll relief-table-wrap">
+            <table id="relief-table">
+              <thead>
+                <tr>
+                  <th class="relief-select-column" scope="col">Pilih</th>
+                  <th scope="col">Guru tidak hadir</th>
+                  <th scope="col">Kelas / period</th>
+                  <th scope="col">Subjek</th>
+                  <th scope="col">Cadangan guru ganti</th>
+                  <th scope="col">Skor</th>
+                </tr>
+              </thead>
+              <tbody id="relief-results"></tbody>
+            </table>
+          </div>
+          <h3 id="relief-print-heading" class="relief-print-heading">Sistem Pintar Penggantian Guru SMK Taman Medan</h3>
+        </section>
+
+        <section class="panel records-panel" aria-labelledby="records-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">SENARAI</p>
+              <h2 id="records-heading">Rekod ketidakhadiran</h2>
+            </div>
+            <button id="clear-button" class="button button-quiet" type="button">Kosongkan</button>
+          </div>
+          <div id="empty-state" class="empty-state">
+            <span class="empty-icon" aria-hidden="true">✓</span>
+            <strong>Belum ada rekod</strong>
+            <span>Rekod yang ditambah akan dipaparkan di sini.</span>
+          </div>
+          <ul id="absence-list" class="absence-list" aria-live="polite"></ul>
+        </section>
+      </div>
+      <p id="app-message" class="app-message" role="status" aria-live="polite"></p>
+      <footer>Sistem Pintar Penggantian Guru SMK Taman Medan <span>·</span> Berfungsi luar talian</footer>
+    </main>
+    <dialog id="auth-dialog" class="auth-dialog" aria-labelledby="auth-heading">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">AKAUN SEKOLAH</p>
+          <h2 id="auth-heading">Log masuk untuk segerakkan</h2>
+        </div>
+        <button id="auth-close-button" class="button button-quiet" type="button" aria-label="Tutup">×</button>
+      </div>
+      <p id="supabase-help" class="privacy-note">Gunakan akaun staf yang telah dijemput oleh pentadbir sekolah.</p>
+      <form id="auth-form" hidden>
+        <label>
+          E-mel akaun sekolah
+          <input name="email" type="email" autocomplete="username" required placeholder="nama@sekolah.edu.my">
+        </label>
+        <label>
+          Kata laluan
+          <input name="password" type="password" autocomplete="current-password" required>
+        </label>
+        <button class="button button-primary" type="submit">Log masuk dan segerakkan</button>
+      </form>
+      <span id="supabase-status" hidden>Peranti sahaja</span>
+    </dialog>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
