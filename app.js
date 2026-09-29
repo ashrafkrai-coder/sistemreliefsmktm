@@ -1,5 +1,10 @@
 import { parseTelegramReliefText } from './telegram-parser.js';
 import { generateReliefSuggestions } from './relief-engine.js';
+import { findTeacherByName, normalizeTeacherName } from './teacher-matcher.js';
+import {
+  countDashboardAbsences,
+  countTeachersNeedingRelief,
+} from './dashboard-summary.js';
 
 const STORAGE_KEY = 'relief-pintar.absences.v1';
 const form = document.querySelector('#absence-form');
@@ -25,9 +30,12 @@ const reliefForm = document.querySelector('#relief-form');
 const reliefDateInput = document.querySelector('#relief-date');
 const reliefMessage = document.querySelector('#relief-message');
 const reliefResults = document.querySelector('#relief-results');
+const reliefPrintResults = document.querySelector('#relief-print-results');
 const reliefWarnings = document.querySelector('#relief-warnings');
 const saveReliefButton = document.querySelector('#save-relief-button');
 const exportPdfButton = document.querySelector('#export-pdf-button');
+const tabButtons = document.querySelectorAll('.tab-button');
+const tabPanels = document.querySelectorAll('.tab-panel');
 
 let absences = loadAbsences().filter((absence) => !absence.remote_id);
 let installPrompt;
@@ -97,42 +105,35 @@ async function loadRemoteAbsences() {
   render();
 }
 
+const TEACHER_NAME_ALIASES = new Map([
+  ['pengetua', 'LILY JULIANI BINTI JAAFAR'],
+  ['pn pengetua', 'LILY JULIANI BINTI JAAFAR'],
+  ['puan pengetua', 'LILY JULIANI BINTI JAAFAR'],
+  ['dalilah', 'NORDALILA HAZIRAH BT MOHAMMAD'],
+]);
+
 async function ensureRemoteTeacher(fullName) {
   const { data: teachers, error: lookupError } = await supabaseClient
     .from('teachers')
     .select('id, full_name');
 
   if (lookupError) throw lookupError;
-  const searchName = normalizeTeacherName(fullName);
-  const exactMatches = (teachers ?? []).filter(
-    (teacher) => normalizeTeacherName(teacher.full_name) === searchName
-  );
-  if (exactMatches.length === 1) return exactMatches[0].id;
-
-  const partialMatches = (teachers ?? []).filter((teacher) =>
-    normalizeTeacherName(teacher.full_name)
-      .split(' ')
-      .some((part) => part.startsWith(searchName))
-  );
-  if (partialMatches.length === 1) return partialMatches[0].id;
-  if (partialMatches.length > 1) {
-    throw new Error(
-      `Nama "${fullName}" sepadan dengan beberapa guru. Gunakan nama penuh dalam mesej Telegram.`
-    );
-  }
-
-  throw new Error(
-    `Nama "${fullName}" tiada dalam senarai guru Supabase. Semak ejaan atau tambah guru melalui senarai rasmi.`
-  );
+  return findTeacherByName(fullName, teachers ?? [], TEACHER_NAME_ALIASES);
 }
 
 async function syncAbsence(absence) {
-  const teacherId = await ensureRemoteTeacher(absence.teacher);
+  const canonicalTeacherName = TEACHER_NAME_ALIASES.get(
+    normalizeTeacherName(absence.teacher)
+  );
+  if (canonicalTeacherName) absence.teacher = canonicalTeacherName;
+
+  const teacher = await ensureRemoteTeacher(absence.teacher);
+  absence.teacher = teacher.full_name;
   const { data, error } = await supabaseClient
     .from('daily_absences')
     .upsert({
       id: absence.id,
-      teacher_id: teacherId,
+      teacher_id: teacher.id,
       absence_date: absence.date,
       category: absence.category,
       remark: absence.remark || null,
@@ -150,9 +151,18 @@ async function syncAbsence(absence) {
 
 async function syncPendingAbsences() {
   const pendingRecords = absences.filter((record) => !record.remote_id);
+  const failures = [];
+  let succeeded = 0;
   for (const record of pendingRecords) {
-    await syncAbsence(record);
+    try {
+      await syncAbsence(record);
+      succeeded += 1;
+    } catch (error) {
+      console.error(`Gagal menyegerakkan rekod ${record.teacher}.`, error);
+      failures.push(`${record.teacher}: ${error.message}`);
+    }
   }
+  return { succeeded, failures };
 }
 
 async function activateSession(session) {
@@ -174,8 +184,14 @@ async function activateSession(session) {
 
   try {
     await loadRemoteAbsences();
-    await syncPendingAbsences();
-    message.textContent = 'Rekod ketidakhadiran berjaya disegerakkan dengan Supabase.';
+    const { succeeded, failures } = await syncPendingAbsences();
+    if (failures.length === 0) {
+      message.textContent = 'Rekod ketidakhadiran berjaya disegerakkan dengan Supabase.';
+    } else if (succeeded > 0) {
+      message.textContent = `Penyegerakan sebahagian: ${succeeded} rekod berjaya, ${failures.length} gagal (${failures.join('; ')}).`;
+    } else {
+      message.textContent = `Penyegerakan gagal untuk semua ${failures.length} rekod (${failures.join('; ')}).`;
+    }
   } catch (error) {
     console.error('Gagal menyegerakkan data Supabase.', error);
     message.textContent = `Penyegerakan gagal: ${error.message}`;
@@ -232,15 +248,6 @@ async function configureSupabase() {
     authOpenButton.hidden = true;
     authForm.hidden = true;
   }
-}
-
-function normalizeTeacherName(name) {
-  return name
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .toLocaleLowerCase('ms');
 }
 
 function renderTelegramPreview() {
@@ -405,7 +412,8 @@ function formatDate(isoDate) {
 
 function render() {
   const today = localDateString();
-  const todaysCount = absences.filter((absence) => absence.date === today).length;
+  const todaysCount = countDashboardAbsences(absences, today);
+  const teachersNeedingRelief = countTeachersNeedingRelief(absences, today);
   document.querySelector('#today-label').textContent = new Intl.DateTimeFormat('ms-MY', {
     weekday: 'long',
     day: 'numeric',
@@ -413,6 +421,7 @@ function render() {
     year: 'numeric',
   }).format(new Date());
   document.querySelector('#absence-count').textContent = String(todaysCount);
+  document.querySelector('#relief-needed-count').textContent = String(teachersNeedingRelief);
   document.querySelector('#saved-count').textContent = String(absences.length);
 
   list.replaceChildren();
@@ -554,8 +563,31 @@ document.querySelector('#sign-out-button').addEventListener('click', async () =>
 
 function renderReliefSuggestions() {
   reliefResults.replaceChildren();
+  reliefPrintResults.replaceChildren();
 
   for (const suggestion of reliefSuggestions) {
+    const printRow = document.createElement('tr');
+    printRow.dataset.absenceId = suggestion.absence_id;
+    printRow.dataset.periodSlot = suggestion.period_slot;
+    const reason = [suggestion.absence_category, suggestion.absence_remark]
+      .filter(Boolean)
+      .join(' · ');
+    const printValues = [
+      suggestion.original_teacher,
+      reason,
+      suggestion.period_slot,
+      suggestion.subject_name,
+      suggestion.class_name,
+      suggestion.relief_teacher || 'Tiada guru ganti',
+      suggestion.room_name,
+    ];
+    for (const value of printValues) {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      printRow.append(cell);
+    }
+    reliefPrintResults.append(printRow);
+
     const row = document.createElement('tr');
     row.dataset.absenceId = suggestion.absence_id;
     row.dataset.periodSlot = suggestion.period_slot;
@@ -623,6 +655,12 @@ function renderReliefSuggestions() {
         suggestion.relief_teacher = candidate.full_name;
         suggestion.score = candidate.total_score;
         printCandidate.textContent = candidate.full_name;
+        const printRow = [...reliefPrintResults.rows].find(
+          (candidateRow) =>
+            candidateRow.dataset.absenceId === suggestion.absence_id &&
+            candidateRow.dataset.periodSlot === suggestion.period_slot
+        );
+        if (printRow) printRow.cells[5].textContent = candidate.full_name;
         scoreCell.textContent = String(candidate.total_score);
         refreshReliefOptionAvailability();
       });
@@ -630,6 +668,68 @@ function renderReliefSuggestions() {
 
     const scoreCell = document.createElement('td');
     scoreCell.textContent = suggestion.score === null ? '—' : String(suggestion.score);
+
+    const roomCell = document.createElement('td');
+    const roomInput = document.createElement('input');
+    roomInput.type = 'text';
+    roomInput.maxLength = 120;
+    roomInput.className = 'relief-room-input';
+    roomInput.value = suggestion.room_name;
+    roomInput.placeholder = 'Contoh: Makmal Komputer';
+    roomInput.setAttribute(
+      'aria-label',
+      `Bilik untuk kelas ${suggestion.class_name}, period ${suggestion.period_slot}`
+    );
+    roomInput.disabled = !currentSession;
+
+    const saveRoomButton = document.createElement('button');
+    saveRoomButton.type = 'button';
+    saveRoomButton.className = 'button button-outline save-room-button';
+    saveRoomButton.textContent = 'Simpan bilik';
+    saveRoomButton.disabled = !currentSession;
+    roomInput.addEventListener('input', () => {
+      saveRoomButton.disabled =
+        !currentSession || roomInput.value.trim() === suggestion.room_name;
+    });
+    saveRoomButton.addEventListener('click', async () => {
+      if (!currentSession) {
+        reliefMessage.textContent = 'Log masuk untuk menyimpan bilik ke jadual waktu.';
+        return;
+      }
+      if (!suggestion.timetable_id) {
+        reliefMessage.textContent = 'ID slot jadual tiada. Jana semula cadangan sebelum menyimpan bilik.';
+        return;
+      }
+
+      saveRoomButton.disabled = true;
+      const roomName = roomInput.value.trim();
+      try {
+        const { data, error } = await supabaseClient
+          .from('master_timetable')
+          .update({ room_name: roomName || null })
+          .eq('id', suggestion.timetable_id)
+          .select('id')
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) throw new Error('Slot jadual tidak ditemui atau tidak dibenarkan dikemas kini.');
+
+        suggestion.room_name = roomName;
+        const printRow = [...reliefPrintResults.rows].find(
+          (candidateRow) =>
+            candidateRow.dataset.absenceId === suggestion.absence_id &&
+            candidateRow.dataset.periodSlot === suggestion.period_slot
+        );
+        if (printRow) printRow.cells[6].textContent = roomName;
+        reliefMessage.textContent = roomName
+          ? `Bilik ${roomName} berjaya disimpan untuk ${suggestion.class_name}, period ${suggestion.period_slot}.`
+          : `Bilik dipadam untuk ${suggestion.class_name}, period ${suggestion.period_slot}.`;
+      } catch (error) {
+        console.error('Gagal menyimpan bilik jadual.', error);
+        reliefMessage.textContent = `Bilik gagal disimpan: ${error.message}`;
+        saveRoomButton.disabled = false;
+      }
+    });
+    roomCell.append(roomInput, saveRoomButton);
 
     if (suggestion.saved) {
       checkbox.checked = false;
@@ -639,7 +739,15 @@ function renderReliefSuggestions() {
       selectCell.append(savedTag);
     }
 
-    row.append(selectCell, originalTeacherCell, classCell, subjectCell, candidateCell, scoreCell);
+    row.append(
+      selectCell,
+      originalTeacherCell,
+      classCell,
+      subjectCell,
+      candidateCell,
+      roomCell,
+      scoreCell
+    );
     reliefResults.append(row);
   }
 
@@ -715,13 +823,17 @@ reliefForm.addEventListener('submit', async (event) => {
       }));
       const bestCandidate = candidates[0];
       return {
+        timetable_id: slot.timetable_id,
         absence_id: slot.absence_id,
         absence_date: date,
         original_teacher_id: slot.original_teacher_id,
         original_teacher: slot.original_teacher_name,
+        absence_category: slot.absence_category,
+        absence_remark: slot.absence_remark,
         period_slot: slot.period_slot,
         class_name: slot.class_name,
         subject_name: slot.subject_name,
+        room_name: slot.room_name,
         candidates,
         relief_teacher_id: bestCandidate?.teacher_id ?? '',
         relief_teacher: bestCandidate?.full_name ?? '',
@@ -807,11 +919,25 @@ saveReliefButton.addEventListener('click', async () => {
 
 exportPdfButton.addEventListener('click', () => {
   if (reliefSuggestions.length === 0) return;
+  switchTab('relief');
   document.body.classList.add('printing-relief');
   window.addEventListener('afterprint', () => {
     document.body.classList.remove('printing-relief');
   }, { once: true });
   window.print();
+});
+
+function switchTab(tabName) {
+  for (const button of tabButtons) {
+    button.setAttribute('aria-selected', String(button.dataset.tab === tabName));
+  }
+  for (const panel of tabPanels) {
+    panel.hidden = panel.dataset.tabPanel !== tabName;
+  }
+}
+
+tabButtons.forEach((button) => {
+  button.addEventListener('click', () => switchTab(button.dataset.tab));
 });
 
 function updateConnectionStatus() {

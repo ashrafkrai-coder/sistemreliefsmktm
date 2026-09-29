@@ -1,4 +1,4 @@
-const CACHE_NAME = 'relief-pintar-v8';
+const CACHE_NAME = 'relief-pintar-v12';
 const APP_SHELL = [
   '/',
   '/index.html',

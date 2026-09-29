@@ -14,7 +14,7 @@ Buka `http://localhost:4173`. Service worker dan pemasangan PWA memerlukan `loca
 
 ## Sediakan Supabase
 
-1. Dalam Supabase Dashboard untuk projek sekolah, buka **SQL Editor**, kemudian jalankan `supabase/schema.sql`.
+1. Dalam Supabase Dashboard untuk projek sekolah, buka **SQL Editor**, kemudian jalankan `supabase/schema.sql`. Untuk pangkalan data sedia ada, jalankan juga `supabase/add_timetable_room.sql` bagi menambah lajur `room_name` pada jadual `master_timetable`.
 2. Dalam **Project Settings → API**, salin **Project URL** dan **Publishable key** (prefix `sb_publishable_`). Legacy `anon` key juga disokong. Jangan gunakan atau dedahkan `sb_secret_` atau `service_role` key dalam PWA.
 3. Isi `supabase-config.js` dengan nilai tadi. Fail konfigurasi sebenar dikecualikan oleh `.gitignore`; `supabase-config.example.js` ialah templat selamat untuk setup baharu.
 4. Dalam **Authentication → Users**, jemput akaun staf sekolah. Matikan pendaftaran terbuka (open sign-ups), dan gunakan akaun yang dijemput sahaja.
@@ -24,7 +24,7 @@ Polisi RLS dalam skrip membenarkan pengguna yang berjaya log masuk membaca dan m
 
 Rekod setempat sedia ada akan cuba disegerakkan apabila log masuk. Semasa offline, rekod baharu kekal pada peranti sehingga sambungan Supabase tersedia dan log masuk semula. Import Telegram menerima tarikh/hari, kategori, nama guru dan catatan waktu; semak pratonton sebelum menyimpan. Modul cadangan relief menyemak jadual kelas, ketidakhadiran, tugasan slot sedia ada, beban relief dan opsyen subjek. Cadangan boleh disimpan sebagai `suggested` dan dicetak ke PDF melalui dialog cetak pelayar (“Save as PDF”).
 
-Nama guru ketika sinkronisasi mesti sepadan dengan nama dalam `teachers` (padanan ringkas hanya diterima jika unik). Sistem tidak mencipta rekod guru baharu secara automatik daripada teks Telegram.
+Nama guru ketika sinkronisasi mesti sepadan dengan nama dalam `teachers`; nama ringkas atau singkatan/inisial dipadankan dengan nama rasmi Supabase hanya jika hasilnya unik. Jika singkatan mempunyai beberapa padanan, sistem meminta nama yang lebih khusus. Sistem tidak mencipta rekod guru baharu secara automatik daripada teks Telegram. Selepas menjana cadangan relief, pengguna yang log masuk boleh mengisi dan menyimpan Bilik terus pada baris jadual; nilai itu disimpan pada `master_timetable.room_name` dan dipaparkan dalam PDF. Kebenaran mengikut polisi sedia ada, iaitu semua pengguna yang log masuk boleh mengurus jadual.
 
 ## Fail utama
 
@@ -35,6 +35,7 @@ Nama guru ketika sinkronisasi mesti sepadan dengan nama dalam `teachers` (padana
 - `sw.js`: cache app shell dan fallback navigasi luar talian.
 - `server.js`: pelayan fail statik Node.js tanpa dependencies.
 - `supabase/schema.sql`: jadual, indeks, fungsi kiraan relief dan polisi RLS.
+- `supabase/add_timetable_room.sql`: migrasi untuk menambah lajur bilik pada jadual sedia ada.
 - `supabase-config.example.js`: templat konfigurasi klien Supabase.
 
 Publishable/anon key digunakan dalam klien pelayar dan bukan rahsia; keselamatan data bergantung pada autentikasi dan polisi RLS. Jangan masukkan Supabase secret key ke dalam frontend atau fail yang diterbitkan kepada pelayar.

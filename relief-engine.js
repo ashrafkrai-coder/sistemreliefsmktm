@@ -1,5 +1,8 @@
 const ACTIVE_STATUSES = ['assigned', 'completed'];
 
+// Administrative staff who should never be suggested as a relief teacher.
+const EXCLUDED_FROM_RELIEF = new Set(['LILY JULIANI BINTI JAAFAR']);
+
 export function isoDateToDayOfWeek(isoDate) {
   const date = new Date(`${isoDate}T00:00:00.000Z`);
   return date.getUTCDay() || 7;
@@ -46,12 +49,12 @@ export async function generateReliefSuggestions(supabaseClient, absenceDate) {
   const [absenceResult, teacherResult, timetableResult] = await Promise.all([
     supabaseClient
       .from('daily_absences')
-      .select('id, teacher_id, is_partial_day, available_from, available_to, teachers!inner(id, full_name)')
+      .select('id, teacher_id, category, remark, is_partial_day, available_from, available_to, teachers!inner(id, full_name)')
       .eq('absence_date', absenceDate),
     supabaseClient.from('teachers').select('id, full_name, option_subject'),
     supabaseClient
       .from('master_timetable')
-      .select('teacher_id, class_name, period_slot, subject_name')
+      .select('id, teacher_id, class_name, period_slot, subject_name, room_name')
       .eq('day_of_week', dayOfWeek),
   ]);
 
@@ -145,7 +148,8 @@ export async function generateReliefSuggestions(supabaseClient, absenceDate) {
           teacher.id !== row.teacher_id &&
           !absentTeacherIds.has(teacher.id) &&
           !busy.has(teacher.id) &&
-          !occupiedReliefKeys.has(`${teacher.id}|${row.period_slot}`)
+          !occupiedReliefKeys.has(`${teacher.id}|${row.period_slot}`) &&
+          !EXCLUDED_FROM_RELIEF.has(teacher.full_name)
       )
       .map((teacher) => {
         const reliefLoad = loadByTeacherId.get(teacher.id) ?? 0;
@@ -168,12 +172,16 @@ export async function generateReliefSuggestions(supabaseClient, absenceDate) {
     }
 
     slots.push({
+      timetable_id: row.id,
       absence_id: absence.id,
       original_teacher_id: row.teacher_id,
       original_teacher_name: absence.teachers.full_name,
+      absence_category: absence.category,
+      absence_remark: absence.remark ?? '',
       class_name: row.class_name,
       period_slot: row.period_slot,
       subject_name: row.subject_name,
+      room_name: row.room_name ?? '',
       candidates,
     });
 
